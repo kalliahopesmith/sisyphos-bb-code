@@ -1,0 +1,164 @@
+#include "Arduino.h"
+#include <ros.h>
+#include <std_msgs/Int8.h>
+
+ros::NodeHandle nh;
+
+int don_drive = 0;
+int key_command;
+int reset_command = 1;
+int reset_command_buff;
+int drive_cmd;
+
+void sisy_cb( const std_msgs::Int8&  cmd_msg){
+  key_command = cmd_msg.data;
+}
+
+void sisy_reset__cb( const std_msgs::Int8&  cmd_msg){
+  reset_command_buff  = cmd_msg.data;
+}
+
+void sisy_drive__cb( const std_msgs::Int8&  cmd_msg){
+  drive_cmd  = cmd_msg.data;
+}
+
+ros::Subscriber<std_msgs::Int8> sub("Key_command", &sisy_cb);
+ros::Subscriber<std_msgs::Int8> reset_sub("Key_reset", &sisy_reset__cb);
+ros::Subscriber<std_msgs::Int8> drive_sub("Key_drive", &sisy_drive__cb);
+
+std_msgs::Int8 str_msg;
+ros::Publisher chatter("chatter", &str_msg);
+
+//char hello[13] = "hello world!";
+
+
+//Set definitions for SisyphosMoveForward and BlackBoxMoveForward
+  int pwm = 3;          //PWM to control motor speed
+  int forward = 2;      //Set motor controller to move motors forward
+  int backward = 4;     //Set motor controller to move motors backward
+
+//Set definitions for BlackBoxTakePicture
+  int relay = 36;
+
+void setup() {
+  nh.initNode();
+  nh.spinOnce();
+  nh.subscribe(sub);
+  nh.subscribe(reset_sub);
+  nh.subscribe(drive_sub);
+  nh.advertise(chatter);
+  pinMode(LED_BUILTIN, OUTPUT);
+  
+  //Setup for SisyphosMoveForward and BlackBoxMoveForward
+  pinMode(pwm, OUTPUT);
+  pinMode(forward, OUTPUT);
+  pinMode(backward, OUTPUT); 
+  pinMode(relay, OUTPUT);
+  analogWrite(pwm, 150);       //Set motor speed
+  
+  //Setup for BlackBoxTakePictures
+  pinMode(relay, OUTPUT);         //Relay (takes picture from Black Box when high)
+}
+
+void loop() {
+  int i = 1;
+  nh.spinOnce();
+  str_msg.data = drive_cmd;
+  chatter.publish( &str_msg );
+  delay(100);
+  command_func(i);
+}
+
+void command_func(int i){
+
+    if (reset_command_buff == 1)
+    { 
+      if (reset_command == 1 && key_command == 1)
+      { 
+        digitalWrite(LED_BUILTIN, HIGH-digitalRead(LED_BUILTIN));
+        SisyphosMoveForward(i);
+      } 
+
+      else {
+        drive_func();
+      }
+    }
+    else if (key_command == 0)
+      {
+        TurnOff();
+      }
+    else if (key_command == 2)
+      {
+        digitalWrite(relay, HIGH);
+      }
+    else {TurnOff();}
+
+}
+
+
+void drive_func(){
+  if (drive_cmd == 1)
+      {
+        digitalWrite(forward, HIGH);
+//        SisyphosMoveForward(1);
+        delay(100);                                                                                                                               
+      }
+     else if (drive_cmd == 2)
+      {
+        digitalWrite(backward, HIGH);
+        delay(100);
+      }
+    else if (drive_cmd == 0)
+      {
+        TurnOff();
+        delay(10);
+      }
+}
+void SisyphosMoveForward(int i) {
+  //Start moving forward
+  
+//  while(i < 2){
+    digitalWrite(forward, HIGH);
+    //Keep moving for 30 seconds (corresponds to a distance of 6.6cm)
+    delay(100);
+    delayMicroseconds(500); 
+//    nh.spinOnce();
+    i = i+1;   
+//  }   
+//  nh.spinOnce(); 
+  //Stop moving
+  digitalWrite(forward, LOW);
+  //  reset_command = 0;
+}
+
+void BlackBoxMoveForward() {
+  //Start moving forward 
+  digitalWrite(backward, HIGH);
+  digitalWrite(backward, LOW);
+  //Keep moving for 5 seconds (corresponds to a distandce of 1ft)
+  delay(535);     
+  //Stop moving
+  digitalWrite(backward, LOW);
+  digitalWrite(backward, LOW);
+}
+
+void BlackBoxTakePictures() {
+  int i = 0;
+  while(i<1000){
+    //Set relay high to take picture
+    digitalWrite(relay, HIGH);
+    //Wait until camera is done taking picture
+    delay(25);
+    nh.spinOnce();
+  }
+  digitalWrite(relay, LOW);
+}
+
+void TurnOff() {
+  digitalWrite(forward, LOW);
+  digitalWrite(backward, LOW);
+  digitalWrite(relay, LOW);
+  //key_command = 0;
+  //return;
+  nh.spinOnce();
+}
